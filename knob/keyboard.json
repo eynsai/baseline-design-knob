@@ -4,14 +4,6 @@
     "maintainer": "BaselineDesign",
     "bootloader": "caterina",
     "diode_direction": "COL2ROW",
-    "features": {
-        "bootmagic": false,
-        "command": false,
-        "console": false,
-        "extrakey": true,
-        "mousekey": true,
-        "nkro": true
-    },
     "matrix_pins": {
         "direct": [
             ["B5", "B4", "E6" ]
