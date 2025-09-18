@@ -1,4 +1,5 @@
 #include "baseline_design/knob/knob.h"
+#include "keyboard.h"
 #include "quantum.h"
 #include QMK_KEYBOARD_H
 
@@ -14,19 +15,27 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 #endif
 // clang-format on
 
+void keyboard_pre_init_user(void) {
+
+    // TEMPORARY TESTING CODE
+    set_knob_mode(KNOB_MODE_WHEEL_VERTICAL);
+    set_knob_acceleration(false);
+    set_knob_sensitivity(1);
+}
+
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
-    if ((keycode == KC_A || keycode == KC_B || keycode == KC_C) && (!record->event.pressed)) {
-        set_knob_mode(KNOB_MODE_ENCODER);
+    if (keycode == KC_A && record->event.pressed) {
+        set_knob_sensitivity(get_knob_sensitivity() / 2.0);
         return false;
-    }
-    if (keycode == KC_A) {
-        set_knob_mode(KNOB_MODE_WHEEL_VERTICAL);
+    } else if (keycode == KC_B && record->event.pressed) {
+        if (get_knob_acceleration()) {
+            set_knob_acceleration(false);
+        } else {
+            set_knob_acceleration(true);
+        }
         return false;
-    } else if (keycode == KC_B) {
-        set_knob_mode(KNOB_MODE_WHEEL_HORIZONTAL);
-        return false;
-    } else if (keycode == KC_C) {
-        set_knob_mode(KNOB_MODE_POINTER_DIAGONAL);
+    } else if (keycode == KC_C && record->event.pressed) {
+        set_knob_sensitivity(get_knob_sensitivity() * 2.0);
         return false;
     }
     return true;

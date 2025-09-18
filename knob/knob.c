@@ -1,12 +1,14 @@
 // Copyright 2025 Morgan Newell Sun
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "knob.h"
+#include <math.h>
 
 #include "quantum.h"
 #include "encoder.h"
 #include "pointing_device.h"
 #include "i2c_master.h"
+
+#include "knob.h"
 
 // ============================================================================
 // AS5600
@@ -50,7 +52,7 @@ int16_t get_as5600_delta(void) {
 // ============================================================================
 
 typedef struct {
-    float items[MOUSE_SMOOTHING_BUFFER_SIZE];
+    float items[ACCELERATION_BUFFER_SIZE];
     float current_sum;
     size_t current_size;
     size_t next_index;
@@ -63,14 +65,14 @@ static void ring_buffer_reset(ring_buffer_t* rb) {
 }
 
 static void ring_buffer_push(ring_buffer_t* rb, float item) {
-    if (rb->current_size == MOUSE_SMOOTHING_BUFFER_SIZE) {
+    if (rb->current_size == ACCELERATION_BUFFER_SIZE) {
         rb->current_sum -= rb->items[rb->next_index];
     } else {
         rb->current_size++;
     }
     rb->items[rb->next_index] = item;
     rb->current_sum += item;
-    rb->next_index = (rb->next_index + 1) % MOUSE_SMOOTHING_BUFFER_SIZE;
+    rb->next_index = (rb->next_index + 1) % ACCELERATION_BUFFER_SIZE;
 }
 
 static float ring_buffer_mean(ring_buffer_t* rb) {
@@ -81,36 +83,32 @@ static float ring_buffer_mean(ring_buffer_t* rb) {
 // KNOB FUNCTIONALITY
 // ============================================================================
 
-typedef struct {
+#define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
+#define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
+#define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
 
+typedef struct {
     // shared
     knob_mode_t mode;
-
     // step counting
-    int16_t step_size;
-
+    uint16_t step_size;
     // mouse
-    float x_multiplier;
-    float y_multiplier;
-    float h_multiplier;
-    float v_multiplier;
-
+    bool acceleration;
+    float sensitivity;
 } knob_config_t;
 knob_config_t knob_config = {0};
 
 typedef struct {
-
     // shared
     uint32_t last_update_time;
-
     // step counting
     int16_t partial_step_accumulator;
     int16_t whole_step_accumulator;
-
     // mouse
     uint32_t last_mouse_time;
     int16_t mouse_accumulator;
-    ring_buffer_t mouse_smoothing_buffer;
+    float mouse_remainder;
+    ring_buffer_t acceleration_buffer;
 
 } knob_state_t;
 knob_state_t knob_state = {0};
@@ -132,17 +130,18 @@ void reset_knob_state(void) {
     knob_state.partial_step_accumulator = 0;
     knob_state.whole_step_accumulator = 0;
     knob_state.mouse_accumulator = 0;
-    ring_buffer_reset(&knob_state.mouse_smoothing_buffer);
+    knob_state.mouse_remainder = 0;
+    ring_buffer_reset(&knob_state.acceleration_buffer);
 }
 
-void housekeeping_task_knob(void) {
+void housekeeping_task_knob_modes(void) {
 
     // reset state after a period of no activity
     if (as5600_delta == 0) {
         if (timer_elapsed32(knob_state.last_update_time) > KNOB_TIMEOUT_MS) {
             reset_knob_state();
+            return;
         }
-        return;
     }
     knob_state.last_update_time = timer_read32();
 
@@ -170,38 +169,67 @@ void housekeeping_task_knob(void) {
             return;
         }
         knob_state.last_mouse_time = timer_read32();
-        ring_buffer_push(&knob_state.mouse_smoothing_buffer, knob_state.mouse_accumulator);
-        float delta = ring_buffer_mean(&knob_state.mouse_smoothing_buffer);
+
+        float delta = knob_state.mouse_accumulator;
         knob_state.mouse_accumulator = 0;
-        // TODO: add acceleration?
+
+        // apply acceleration
+        if (knob_config.acceleration) {
+            float speed = fabsf(delta);
+            ring_buffer_push(&knob_state.acceleration_buffer, speed);
+            if (delta != 0) {
+                // v_out = p * square(min(v_in - r, 0)) + q * (v_in - r) + r
+                speed = ring_buffer_mean(&knob_state.acceleration_buffer);
+                float speed_offset = speed - ACCELERATION_CONST_R;
+                float scale_factor = ACCELERATION_CONST_Q * speed_offset + ACCELERATION_CONST_R;
+                if (speed_offset < 0) {
+                    scale_factor += ACCELERATION_CONST_P * speed_offset * speed_offset;
+                }
+                scale_factor /= speed;
+                delta *= scale_factor;
+            }
+        }
+
+        // apply remainder, scale by sensitivity, and truncate to integer
+        delta *= knob_config.sensitivity;
+        delta += knob_state.mouse_remainder;
+        int delta_truncated = delta;
+        knob_state.mouse_remainder = delta - delta_truncated;
+        
+        // apply to mouse report
         report_mouse_t mouse = pointing_device_get_report();
         if (knob_config.mode == KNOB_MODE_WHEEL_VERTICAL) {
-            mouse.v = (mouse_hv_report_t) delta * knob_config.v_multiplier;
+            mouse.v += delta_truncated * -1;
         } else if (knob_config.mode == KNOB_MODE_WHEEL_HORIZONTAL) {
-            mouse.h = (mouse_hv_report_t )delta * knob_config.h_multiplier;
+            mouse.h += delta_truncated;
         } else if (knob_config.mode == KNOB_MODE_POINTER_VERTICAL) {
-            mouse.y = (mouse_xy_report_t) delta * knob_config.y_multiplier;
+            mouse.y += delta_truncated * -1;
         } else if (knob_config.mode == KNOB_MODE_POINTER_HORIZONTAL) {
-            mouse.x = (mouse_xy_report_t) delta * knob_config.x_multiplier;
+            mouse.x += delta_truncated;
         } else {  // if (knob_config.mode == KNOB_MODE_POINTER_DIAGONAL) {
-            mouse.x = (mouse_xy_report_t) delta * knob_config.x_multiplier;
-            mouse.y = (mouse_xy_report_t) delta * knob_config.y_multiplier;
+            mouse.y += delta_truncated * -1;
+            mouse.x += delta_truncated;
         }
         pointing_device_set_report(mouse);
         return;
     }
-
-
 }
 
-void set_knob_mode(knob_mode_t mode) {
-    reset_knob_state();
-    knob_config.mode = mode;
-}
+// ============================================================================
+// PUBLIC KNOB API
+// ============================================================================
 
-knob_mode_t get_knob_mode(void) {
-    return knob_config.mode;
-}
+void set_knob_mode(knob_mode_t mode) { reset_knob_state(); knob_config.mode = mode; }
+knob_mode_t get_knob_mode(void) { return knob_config.mode; }
+
+void set_knob_step_size(uint16_t step_size) { knob_config.step_size = step_size; }
+uint16_t get_knob_step_size(void) { return knob_config.step_size; }
+
+void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
+uint16_t get_knob_acceleration(void) { return knob_config.acceleration; }
+
+void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
+float get_knob_sensitivity(void) { return knob_config.sensitivity; }
 
 // ============================================================================
 // QMK HOOKS
@@ -210,22 +238,13 @@ knob_mode_t get_knob_mode(void) {
 void keyboard_pre_init_kb(void){
     i2c_init();
     reset_knob_state();
-    keyboard_pre_init_user();  // weak function allows user to implement custom functionality
-
-    // TEMPORARY TESTING CODE
-    knob_config.mode = KNOB_MODE_ENCODER;
-    knob_config.step_size = 300;
-    knob_config.h_multiplier = 8;
-    knob_config.v_multiplier = -8;
-    knob_config.x_multiplier = 1;
-    knob_config.y_multiplier = -1;
-    set_knob_mode(KNOB_MODE_ENCODER);
+    keyboard_pre_init_user();
 }
 
 void housekeeping_task_kb(void) {
     housekeeping_task_read_as5600();
-    housekeeping_task_knob();
-    housekeeping_task_user();  // weak function allows user to implement custom functionality
+    housekeeping_task_knob_modes();
+    housekeeping_task_user();
 }
 
 
