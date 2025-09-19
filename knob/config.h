@@ -19,3 +19,4 @@
 // misc qmk features
 #define BOOTMAGIC_ROW 0
 #define BOOTMAGIC_COLUMN 0
+#define MIDI_ADVANCED

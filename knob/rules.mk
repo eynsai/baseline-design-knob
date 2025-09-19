@@ -16,3 +16,4 @@ RGBLIGHT_DRIVER = ws2812
 # misc qmk features
 BOOTMAGIC_ENABLE = yes
 EXTRAKEY_ENABLE = yes
+MIDI_ENABLE = yes

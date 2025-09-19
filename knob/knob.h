@@ -12,9 +12,15 @@ typedef enum {
     KNOB_MODE_POINTER_VERTICAL,
     KNOB_MODE_POINTER_HORIZONTAL,
     KNOB_MODE_POINTER_DIAGONAL,
-    // KNOB_MODE_MIDI,
+    KNOB_MODE_MIDI,
     // KNOB_MODE_DAVINCI_RESOLVE,
 } knob_mode_t;
+
+typedef enum {
+    MIDI_RELATIVE_MODE_OFFSET,   // 64 = no change; 65..127 = +1..+63; 63..1 = -1..-63
+    MIDI_RELATIVE_MODE_TWOS,     // 0x00 = no change; 0x01..0x3F = +1..+63; 0x7F..0x40 = -1..-64
+    MIDI_RELATIVE_MODE_SIGNED,   // 0x00 = no change; 0x01..0x3F = +1..+63; 0x41..0x7F = -1..-63
+} midi_relative_mode_t;
 
 uint16_t get_as5600_raw(void);
 int16_t get_as5600_delta(void);

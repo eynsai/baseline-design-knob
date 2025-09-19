@@ -6,6 +6,8 @@
 #include "quantum.h"
 #include "encoder.h"
 #include "pointing_device.h"
+#include "midi/midi.h"
+#include "midi/midi_device.h"
 #include "i2c_master.h"
 
 #include "knob.h"
@@ -48,7 +50,7 @@ int16_t get_as5600_delta(void) {
 }
 
 // ============================================================================
-// RING BUFFERS
+// RING BUFFERS FOR ACCELERATION
 // ============================================================================
 
 typedef struct {
@@ -77,6 +79,45 @@ static void ring_buffer_push(ring_buffer_t* rb, float item) {
 
 static float ring_buffer_mean(ring_buffer_t* rb) {
     return rb->current_size > 0 ? rb->current_sum / rb->current_size : 0;
+}
+
+// ============================================================================
+// MIDI HELPERS
+// ============================================================================
+
+extern MidiDevice midi_device;
+
+void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_relative_mode_t mode) {
+    if (delta > 63)  delta = 63;
+    if (delta < -63) delta = -63;
+    uint8_t value = 0;
+    if (delta == 0) {
+        if (mode == MIDI_RELATIVE_MODE_OFFSET) value = 64;
+        else value = 0;
+    } else {
+        if (delta > 63)  delta = 63;
+        if (delta < -63) delta = -63;
+        switch (mode) {
+            case MIDI_RELATIVE_MODE_OFFSET:
+                value = (uint8_t)(64 + delta);
+                break;
+            case MIDI_RELATIVE_MODE_TWOS:
+                if (delta > 0) value = (uint8_t)delta;
+                else {
+                    int8_t d = delta;
+                    uint8_t v = (uint8_t)d & 0x7F;
+                    value = v ? v : 0x40;
+                }
+                break;
+            case MIDI_RELATIVE_MODE_SIGNED: {
+                uint8_t mag = (uint8_t)((delta >= 0) ? delta : -delta);
+                uint8_t sign = (delta < 0) ? 0x40 : 0x00;
+                value = (uint8_t)(sign | mag);
+                break;
+            }
+        }
+    }
+    midi_send_cc(&midi_device, channel, cc, value);
 }
 
 // ============================================================================
@@ -171,6 +212,9 @@ void housekeeping_task_knob_modes(void) {
         case KNOB_MODE_POINTER_DIAGONAL:
             delta *= knob_config.events_per_rotation * (300.0 / 4096.0);
             break;
+        case KNOB_MODE_MIDI:
+            delta *= knob_config.events_per_rotation * (1.0 / 4096.0);
+            break;
     }
 
     // truncate to integer and save remainder
@@ -209,6 +253,8 @@ void housekeeping_task_knob_modes(void) {
         mouse.y += delta_truncated * -1;
         mouse.x += delta_truncated;
         pointing_device_set_report(mouse);
+    } else if (knob_config.mode == KNOB_MODE_MIDI) {
+        midi_send_relative_cc(delta_truncated, 1, 1, MIDI_RELATIVE_MODE_OFFSET);
     }
     return;
 }
@@ -225,6 +271,8 @@ uint16_t get_knob_acceleration(void) { return knob_config.acceleration; }
 
 void set_knob_events_per_rotation(float events_per_rotation) { knob_config.events_per_rotation = events_per_rotation; }
 float get_knob_events_per_rotation(void) { return knob_config.events_per_rotation; }
+
+// TODO: void set_midi_config(uint8_t channel, uint8_t cc, ) {  }
 
 // ============================================================================
 // QMK HOOKS
@@ -250,7 +298,7 @@ void housekeeping_task_kb(void) {
 Stepped functions
 DONE - Volume control (+media keys?)
 DONE - Arrow keys (up/down, left/right)
-- Relative MIDI CC (multiple preset channels)
+DONE - Relative MIDI CC (multiple preset channels)
 
 Smooth functions:
 DONE - Smooth scrolling (vertical/horizontal, modifiers)
