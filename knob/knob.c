@@ -52,7 +52,7 @@ int16_t get_as5600_delta(void) {
 // ============================================================================
 
 typedef struct {
-    float items[ACCELERATION_BUFFER_SIZE];
+    float items[KNOB_ACCELERATION_BUFFER_SIZE];
     float current_sum;
     size_t current_size;
     size_t next_index;
@@ -65,14 +65,14 @@ static void ring_buffer_reset(ring_buffer_t* rb) {
 }
 
 static void ring_buffer_push(ring_buffer_t* rb, float item) {
-    if (rb->current_size == ACCELERATION_BUFFER_SIZE) {
+    if (rb->current_size == KNOB_ACCELERATION_BUFFER_SIZE) {
         rb->current_sum -= rb->items[rb->next_index];
     } else {
         rb->current_size++;
     }
     rb->items[rb->next_index] = item;
     rb->current_sum += item;
-    rb->next_index = (rb->next_index + 1) % ACCELERATION_BUFFER_SIZE;
+    rb->next_index = (rb->next_index + 1) % KNOB_ACCELERATION_BUFFER_SIZE;
 }
 
 static float ring_buffer_mean(ring_buffer_t* rb) {
@@ -88,53 +88,35 @@ static float ring_buffer_mean(ring_buffer_t* rb) {
 #define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
 
 typedef struct {
-    // shared
     knob_mode_t mode;
-    // step counting
-    uint16_t step_size;
-    // mouse
     bool acceleration;
-    float sensitivity;
+    float events_per_rotation;
 } knob_config_t;
 knob_config_t knob_config = {0};
 
 typedef struct {
-    // shared
     uint32_t last_update_time;
-    // step counting
-    int16_t partial_step_accumulator;
-    int16_t whole_step_accumulator;
-    // mouse
     uint32_t last_mouse_time;
-    int16_t mouse_accumulator;
-    float mouse_remainder;
+    int16_t accumulator;
+    float remainder;
     ring_buffer_t acceleration_buffer;
 
 } knob_state_t;
 knob_state_t knob_state = {0};
 
-void accumulate_steps(void) {
-    knob_state.partial_step_accumulator += as5600_delta;
-    while (knob_state.partial_step_accumulator >= knob_config.step_size) {
-        knob_state.partial_step_accumulator -= knob_config.step_size;
-        knob_state.whole_step_accumulator += 1;
-    }
-    while (knob_state.partial_step_accumulator <= -knob_config.step_size) {
-        knob_state.partial_step_accumulator += knob_config.step_size;
-        knob_state.whole_step_accumulator -= 1;
-    }
-}
-
 void reset_knob_state(void) {
     knob_state.last_update_time = timer_read32();
-    knob_state.partial_step_accumulator = 0;
-    knob_state.whole_step_accumulator = 0;
-    knob_state.mouse_accumulator = 0;
-    knob_state.mouse_remainder = 0;
+    knob_state.accumulator = 0;
+    knob_state.remainder = 0;
     ring_buffer_reset(&knob_state.acceleration_buffer);
 }
 
 void housekeeping_task_knob_modes(void) {
+
+    // skip everything if the knob is set to off
+    if (knob_config.mode == KNOB_MODE_OFF) {
+        return;
+    }
 
     // reset state after a period of no activity
     if (as5600_delta == 0) {
@@ -145,74 +127,90 @@ void housekeeping_task_knob_modes(void) {
     }
     knob_state.last_update_time = timer_read32();
 
-    // disable the knob
-    if (knob_config.mode == KNOB_MODE_OFF) {
-        return;
-
-    // send keypresses corresponding to the encoder map
-    } else if (knob_config.mode == KNOB_MODE_ENCODER) {
-        accumulate_steps();
-        while (knob_state.whole_step_accumulator > 0) {
-            encoder_queue_event(0, true); // send a CW encoder event
-            knob_state.whole_step_accumulator -= 1;
-        } 
-        while (knob_state.whole_step_accumulator < 0) {
-            encoder_queue_event(0, false); // send a CCW encoder event
-            knob_state.whole_step_accumulator += 1;
-        }
-        return;
-
-    // move the wheel (for scrolling) or the pointer (for click-and-drag)
-    } else if (knob_config.mode >= KNOB_MODE_WHEEL_VERTICAL && knob_config.mode <= KNOB_MODE_POINTER_DIAGONAL) {
-        knob_state.mouse_accumulator += as5600_delta;
-        if (timer_elapsed32(knob_state.last_mouse_time) < MOUSE_THROTTLE_MS) {
-            return;
-        }
-        knob_state.last_mouse_time = timer_read32();
-
-        float delta = knob_state.mouse_accumulator;
-        knob_state.mouse_accumulator = 0;
-
-        // apply acceleration
-        if (knob_config.acceleration) {
-            float speed = fabsf(delta);
-            ring_buffer_push(&knob_state.acceleration_buffer, speed);
-            if (delta != 0) {
-                // v_out = p * square(min(v_in - r, 0)) + q * (v_in - r) + r
-                speed = ring_buffer_mean(&knob_state.acceleration_buffer);
-                float speed_offset = speed - ACCELERATION_CONST_R;
-                float scale_factor = ACCELERATION_CONST_Q * speed_offset + ACCELERATION_CONST_R;
-                if (speed_offset < 0) {
-                    scale_factor += ACCELERATION_CONST_P * speed_offset * speed_offset;
-                }
-                scale_factor /= speed;
-                delta *= scale_factor;
-            }
-        }
-
-        // apply remainder, scale by sensitivity, and truncate to integer
-        delta *= knob_config.sensitivity;
-        delta += knob_state.mouse_remainder;
-        int delta_truncated = delta;
-        knob_state.mouse_remainder = delta - delta_truncated;
-        
-        // apply to mouse report
-        report_mouse_t mouse = pointing_device_get_report();
-        if (knob_config.mode == KNOB_MODE_WHEEL_VERTICAL) {
-            mouse.v += delta_truncated * -1;
-        } else if (knob_config.mode == KNOB_MODE_WHEEL_HORIZONTAL) {
-            mouse.h += delta_truncated;
-        } else if (knob_config.mode == KNOB_MODE_POINTER_VERTICAL) {
-            mouse.y += delta_truncated * -1;
-        } else if (knob_config.mode == KNOB_MODE_POINTER_HORIZONTAL) {
-            mouse.x += delta_truncated;
-        } else {  // if (knob_config.mode == KNOB_MODE_POINTER_DIAGONAL) {
-            mouse.y += delta_truncated * -1;
-            mouse.x += delta_truncated;
-        }
-        pointing_device_set_report(mouse);
+    // throttle rate at which actions are performed
+    knob_state.accumulator += as5600_delta;
+    if (timer_elapsed32(knob_state.last_mouse_time) < KNOB_THROTTLE_MS) {
         return;
     }
+    knob_state.last_mouse_time = timer_read32();
+
+    // zero out the accumulator when ready to perform an action
+    float delta = knob_state.accumulator;
+    knob_state.accumulator = 0;
+
+    // apply acceleration
+    if (knob_config.acceleration) {
+        float speed = fabsf(delta);
+        ring_buffer_push(&knob_state.acceleration_buffer, speed);
+        if (delta != 0) {
+            // v_out = p * square(min(v_in - r, 0)) + q * (v_in - r) + r
+            speed = ring_buffer_mean(&knob_state.acceleration_buffer);
+            float speed_offset = speed - ACCELERATION_CONST_R;
+            float scale_factor = ACCELERATION_CONST_Q * speed_offset + ACCELERATION_CONST_R;
+            if (speed_offset < 0) {
+                scale_factor += ACCELERATION_CONST_P * speed_offset * speed_offset;
+            }
+            scale_factor /= speed;
+            delta *= scale_factor;
+        }
+    }
+
+    // scale delta, interpreting events_per_rotation differently based on mode
+    switch (knob_config.mode) {
+        case KNOB_MODE_OFF:
+            return;  // unreachable
+        case KNOB_MODE_ENCODER:
+            delta *= knob_config.events_per_rotation * (1.0 / 4096.0);
+            break;
+        case KNOB_MODE_WHEEL_VERTICAL:
+        case KNOB_MODE_WHEEL_HORIZONTAL:
+            delta *= knob_config.events_per_rotation * (120.0 / 4096.0);
+            break;
+        case KNOB_MODE_POINTER_VERTICAL:
+        case KNOB_MODE_POINTER_HORIZONTAL:
+        case KNOB_MODE_POINTER_DIAGONAL:
+            delta *= knob_config.events_per_rotation * (300.0 / 4096.0);
+            break;
+    }
+
+    // truncate to integer and save remainder
+    delta += knob_state.remainder;
+    int delta_truncated = delta;
+    knob_state.remainder = delta - delta_truncated;
+    
+    // apply action
+    if (knob_config.mode == KNOB_MODE_ENCODER) {
+        while (delta_truncated > 0) {
+            encoder_queue_event(0, true);
+            delta_truncated -= 1;
+        } 
+        while (delta_truncated < 0) {
+            encoder_queue_event(0, false);
+            delta_truncated += 1;
+        }
+    } else if (knob_config.mode == KNOB_MODE_WHEEL_VERTICAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.v += delta_truncated * -1;
+        pointing_device_set_report(mouse);
+    } else if (knob_config.mode == KNOB_MODE_WHEEL_HORIZONTAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.h += delta_truncated;
+        pointing_device_set_report(mouse);
+    } else if (knob_config.mode == KNOB_MODE_POINTER_VERTICAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.y += delta_truncated * -1;
+        pointing_device_set_report(mouse);
+    } else if (knob_config.mode == KNOB_MODE_POINTER_HORIZONTAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.x += delta_truncated;
+        pointing_device_set_report(mouse);
+    } else if (knob_config.mode == KNOB_MODE_POINTER_DIAGONAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.y += delta_truncated * -1;
+        mouse.x += delta_truncated;
+        pointing_device_set_report(mouse);
+    }
+    return;
 }
 
 // ============================================================================
@@ -222,14 +220,11 @@ void housekeeping_task_knob_modes(void) {
 void set_knob_mode(knob_mode_t mode) { reset_knob_state(); knob_config.mode = mode; }
 knob_mode_t get_knob_mode(void) { return knob_config.mode; }
 
-void set_knob_step_size(uint16_t step_size) { knob_config.step_size = step_size; }
-uint16_t get_knob_step_size(void) { return knob_config.step_size; }
-
 void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
 uint16_t get_knob_acceleration(void) { return knob_config.acceleration; }
 
-void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
-float get_knob_sensitivity(void) { return knob_config.sensitivity; }
+void set_knob_events_per_rotation(float events_per_rotation) { knob_config.events_per_rotation = events_per_rotation; }
+float get_knob_events_per_rotation(void) { return knob_config.events_per_rotation; }
 
 // ============================================================================
 // QMK HOOKS
@@ -263,9 +258,9 @@ DONE - Mouse move/drag (vertical/horizontal/diagonal, modifiers)
 - DaVinci Resolve
 
 Smooth modifiers:
-DONE - Sensitivity
+DONE - events_per_rotation
 DONE - Smoothing window
-- Acceleration
+DONE - Acceleration
 
 Other:
 - Layer control and ergonomics
