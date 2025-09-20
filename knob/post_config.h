@@ -1,4 +1,4 @@
-// Copyright 2025 Morgan Newell Sun
+// Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #ifndef KNOB_TIMEOUT_MS

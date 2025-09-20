@@ -1,4 +1,4 @@
-// Copyright 2025 Morgan Newell Sun
+// Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
@@ -22,8 +22,20 @@ typedef enum {
     MIDI_MODE_TWOS,
 } midi_mode_t;
 
+typedef struct {
+    knob_mode_t mode;
+    float sensitivity;
+    bool acceleration;
+    uint8_t midi_channel;
+    uint8_t midi_cc;
+    midi_mode_t midi_mode;
+} knob_config_t;
+
 uint16_t get_as5600_raw(void);
 int16_t get_as5600_delta(void);
+
+knob_config_t get_knob_config(void);
+void set_knob_config(knob_config_t config);
 
 knob_mode_t get_knob_mode(void);
 void set_knob_mode(knob_mode_t mode);

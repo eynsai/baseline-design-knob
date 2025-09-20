@@ -1,3 +1,6 @@
+// Copyright 2025 Morgan Newell Sun (@eynsai)
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #pragma once
 
 // core knob functionality
@@ -17,4 +20,3 @@
 // misc qmk features
 #define BOOTMAGIC_ROW 0
 #define BOOTMAGIC_COLUMN 0
-#define MIDI_ADVANCED

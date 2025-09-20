@@ -1,4 +1,4 @@
-// Copyright 2025 Morgan Newell Sun
+// Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <math.h>
@@ -127,15 +127,6 @@ void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t m
 #define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
 #define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
 #define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
-
-typedef struct {
-    knob_mode_t mode;
-    float sensitivity;
-    bool acceleration;
-    uint8_t midi_channel;
-    uint8_t midi_cc;
-    midi_mode_t midi_mode;
-} knob_config_t;
 
 typedef struct {
     uint32_t last_update_time;
@@ -282,6 +273,9 @@ void set_knob_mode(knob_mode_t mode) {
     }
     reset_knob_state();
 }
+
+knob_config_t get_knob_config(void) { return knob_config; }
+void set_knob_config(knob_config_t config) { knob_config = config; }
 
 float get_knob_sensitivity(void) { return knob_config.sensitivity; }
 void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
