@@ -321,31 +321,3 @@ void housekeeping_task_kb(void) {
 #endif // !KNOB_MINIMAL
     housekeeping_task_user();
 }
-
-
-
-
-/*
-
-Stepped functions
-DONE - Volume control (+media keys?)
-DONE - Arrow keys (up/down, left/right)
-DONE - Relative MIDI CC (multiple preset channels)
-
-Smooth functions:
-DONE - Smooth scrolling (vertical/horizontal, modifiers)
-DONE - Mouse move/drag (vertical/horizontal/diagonal, modifiers)
-- DaVinci Resolve
-
-Smooth modifiers:
-DONE - sensitivity
-DONE - Smoothing window
-DONE - Acceleration
-
-Other:
-- Layer control and ergonomics
-- Indicator lights (vs backlight RGB?)
-- MacOS compatibility?
-- Switches to enable/disable features
-
-*/
