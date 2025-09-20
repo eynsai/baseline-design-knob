@@ -5,13 +5,6 @@
 #include "i2c_master.h"
 #include "knob.h"
 
-// TODO DELETE BELOW
-#include "quantum.h"
-#include "encoder.h"
-#include "pointing_device.h"
-#include "midi/midi.h"
-#include "midi/midi_device.h"
-
 // ============================================================================
 // AS5600
 // ============================================================================
@@ -96,8 +89,9 @@ void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t m
     if (delta < -63) delta = -63;
     uint8_t value = 0;
     if (delta == 0) {
-        if (mode == MIDI_MODE_OFFSET) value = 64;
-        else value = 0;
+        return;
+        // if (mode == MIDI_MODE_OFFSET) value = 64;
+        // else value = 0;
     } else {
         if (delta > 63)  delta = 63;
         if (delta < -63) delta = -63;
@@ -271,8 +265,8 @@ void housekeeping_task_knob_modes(void) {
 
 knob_mode_t get_knob_mode(void) { return knob_config.mode; }
 void set_knob_mode(knob_mode_t mode) {
-    knob_mode_t prev_mode = knob_config.mode;
 #    ifdef POINTING_DEVICE_ENABLE
+    knob_mode_t prev_mode = knob_config.mode;
     if (prev_mode == KNOB_MODE_DRAG_VERTICAL || prev_mode == KNOB_MODE_DRAG_HORIZONTAL || prev_mode == KNOB_MODE_DRAG_DIAGONAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.buttons = pointing_device_handle_buttons(mouse.buttons, false, POINTING_DEVICE_BUTTON1);
