@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <math.h>
+#include "i2c_master.h"
+#include "knob.h"
 
+// TODO DELETE BELOW
 #include "quantum.h"
 #include "encoder.h"
 #include "pointing_device.h"
 #include "midi/midi.h"
 #include "midi/midi_device.h"
-#include "i2c_master.h"
-
-#include "knob.h"
 
 // ============================================================================
 // AS5600
@@ -53,6 +53,8 @@ int16_t get_as5600_delta(void) {
 // RING BUFFERS FOR ACCELERATION
 // ============================================================================
 
+#ifndef KNOB_MINIMAL
+
 typedef struct {
     float items[KNOB_ACCELERATION_BUFFER_SIZE];
     float current_sum;
@@ -84,6 +86,8 @@ static float ring_buffer_mean(ring_buffer_t* rb) {
 // ============================================================================
 // MIDI HELPERS
 // ============================================================================
+
+#    ifdef MIDI_ENABLE
 
 extern MidiDevice midi_device;
 
@@ -120,13 +124,15 @@ void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t m
     midi_send_cc(&midi_device, channel, cc, value);
 }
 
+#    endif  // MIDI_ENABLE
+
 // ============================================================================
 // KNOB FUNCTIONALITY
 // ============================================================================
 
-#define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
-#define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
-#define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
+#    define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
+#    define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
+#    define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
 
 typedef struct {
     uint32_t last_update_time;
@@ -191,24 +197,22 @@ void housekeeping_task_knob_modes(void) {
     }
 
     // scale delta, interpreting sensitivity differently based on mode
-    switch (knob_config.mode) {
-        case KNOB_MODE_OFF:
-            return;  // unreachable
-        case KNOB_MODE_ENCODER:
-            delta *= knob_config.sensitivity * (1.0 / 4096.0);
-            break;
-        case KNOB_MODE_WHEEL_VERTICAL:
-        case KNOB_MODE_WHEEL_HORIZONTAL:
-            delta *= knob_config.sensitivity * (120.0 / 4096.0);
-            break;
-        case KNOB_MODE_DRAG_VERTICAL:
-        case KNOB_MODE_DRAG_HORIZONTAL:
-        case KNOB_MODE_DRAG_DIAGONAL:
-            delta *= knob_config.sensitivity * (30.0 / 4096.0);
-            break;
-        case KNOB_MODE_MIDI:
-            delta *= knob_config.sensitivity * (1.0 / 4096.0);
-            break;
+    if (knob_config.mode == KNOB_MODE_OFF) {
+        return; // unreachable
+#    ifdef ENCODER_ENABLE
+    } else if (knob_config.mode == KNOB_MODE_ENCODER) {
+        delta *= knob_config.sensitivity * (1.0 / 4096.0);
+#    endif  // ENCODER_ENABLE
+#    ifdef POINTING_DEVICE_ENABLE
+    } else if (knob_config.mode == KNOB_MODE_WHEEL_VERTICAL || knob_config.mode == KNOB_MODE_WHEEL_HORIZONTAL) {
+        delta *= knob_config.sensitivity * (120.0 / 4096.0);
+    } else if (knob_config.mode == KNOB_MODE_DRAG_VERTICAL || knob_config.mode == KNOB_MODE_DRAG_HORIZONTAL || knob_config.mode == KNOB_MODE_DRAG_DIAGONAL) {
+        delta *= knob_config.sensitivity * (30.0 / 4096.0);
+#    endif  // POINTING_DEVICE_ENABLE
+#    ifdef MIDI_ENABLE
+    } else if (knob_config.mode == KNOB_MODE_MIDI) {
+        delta *= knob_config.sensitivity * (1.0 / 4096.0);
+#    endif  // MIDI_ENABLE
     }
 
     // truncate to integer and save remainder
@@ -217,7 +221,10 @@ void housekeeping_task_knob_modes(void) {
     knob_state.remainder = delta - delta_truncated;
     
     // apply action
-    if (knob_config.mode == KNOB_MODE_ENCODER) {
+    if (knob_config.mode == KNOB_MODE_OFF) {
+        // unreachable
+#    ifdef ENCODER_ENABLE
+    } else if (knob_config.mode == KNOB_MODE_ENCODER) {
         while (delta_truncated > 0) {
             encoder_queue_event(0, true);
             delta_truncated -= 1;
@@ -226,6 +233,8 @@ void housekeeping_task_knob_modes(void) {
             encoder_queue_event(0, false);
             delta_truncated += 1;
         }
+#    endif  // ENCODER_ENABLE
+#    ifdef POINTING_DEVICE_ENABLE
     } else if (knob_config.mode == KNOB_MODE_WHEEL_VERTICAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.v += delta_truncated * -1;
@@ -247,8 +256,11 @@ void housekeeping_task_knob_modes(void) {
         mouse.y += delta_truncated * -1;
         mouse.x += delta_truncated;
         pointing_device_set_report(mouse);
+#    endif  // POINTING_DEVICE_ENABLE
+#    ifdef MIDI_ENABLE
     } else if (knob_config.mode == KNOB_MODE_MIDI) {
         midi_send_relative_cc(delta_truncated, knob_config.midi_channel, knob_config.midi_cc, knob_config.midi_mode);
+#    endif  // MIDI_ENABLE
     }
     return;
 }
@@ -260,37 +272,41 @@ void housekeeping_task_knob_modes(void) {
 knob_mode_t get_knob_mode(void) { return knob_config.mode; }
 void set_knob_mode(knob_mode_t mode) {
     knob_mode_t prev_mode = knob_config.mode;
+#    ifdef POINTING_DEVICE_ENABLE
     if (prev_mode == KNOB_MODE_DRAG_VERTICAL || prev_mode == KNOB_MODE_DRAG_HORIZONTAL || prev_mode == KNOB_MODE_DRAG_DIAGONAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.buttons = pointing_device_handle_buttons(mouse.buttons, false, POINTING_DEVICE_BUTTON1);
         pointing_device_set_report(mouse);
     }
+#    endif  // POINTING_DEVICE_ENABLE
     knob_config.mode = mode;
+#    ifdef POINTING_DEVICE_ENABLE
     if (mode == KNOB_MODE_DRAG_VERTICAL || mode == KNOB_MODE_DRAG_HORIZONTAL || mode == KNOB_MODE_DRAG_DIAGONAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.buttons = pointing_device_handle_buttons(mouse.buttons, true, POINTING_DEVICE_BUTTON1);
         pointing_device_set_report(mouse);
     }
+#    endif  // POINTING_DEVICE_ENABLE
     reset_knob_state();
 }
 
 knob_config_t get_knob_config(void) { return knob_config; }
 void set_knob_config(knob_config_t config) { knob_config = config; }
-
 float get_knob_sensitivity(void) { return knob_config.sensitivity; }
 void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
-
 bool get_knob_acceleration(void) { return knob_config.acceleration; }
 void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
 
+#    ifdef MIDI_ENABLE
 uint8_t get_knob_midi_channel(void) { return knob_config.midi_channel; }
 void set_knob_midi_channel(uint8_t channel) { knob_config.midi_channel = channel; }
-
 uint8_t get_knob_midi_cc(void) { return knob_config.midi_cc; }
 void set_knob_midi_cc(uint8_t cc) { knob_config.midi_cc = cc; }
-
 midi_mode_t get_knob_midi_mode(void) { return knob_config.midi_mode; }
 void set_knob_midi_mode(midi_mode_t mode) { knob_config.midi_mode = mode; }
+#    endif  // MIDI_ENABLE
+
+#endif // !KNOB_MINIMAL
 
 // ============================================================================
 // QMK HOOKS
@@ -298,13 +314,17 @@ void set_knob_midi_mode(midi_mode_t mode) { knob_config.midi_mode = mode; }
 
 void keyboard_pre_init_kb(void){
     i2c_init();
+#ifndef KNOB_MINIMAL
     reset_knob_state();
+#endif // !KNOB_MINIMAL
     keyboard_pre_init_user();
 }
 
 void housekeeping_task_kb(void) {
     housekeeping_task_read_as5600();
+#ifndef KNOB_MINIMAL
     housekeeping_task_knob_modes();
+#endif // !KNOB_MINIMAL
     housekeeping_task_user();
 }
 

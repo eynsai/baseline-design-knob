@@ -1,10 +1,8 @@
 // Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "baseline_design/knob/knob.h"
-#include "keyboard.h"
-#include "quantum.h"
 #include QMK_KEYBOARD_H
+#include "baseline_design/knob/knob.h"  // TODO REPLACE WITH #include "knob.h"
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -21,7 +19,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 void keyboard_pre_init_user(void) {
 
     // TEMPORARY TESTING CODE
-    set_knob_mode(KNOB_MODE_MIDI);
+    set_knob_mode(KNOB_MODE_ENCODER);
     set_knob_acceleration(false);
     set_knob_sensitivity(10);
     set_knob_midi_channel(0);
