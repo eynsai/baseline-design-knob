@@ -9,27 +9,36 @@ typedef enum {
     KNOB_MODE_ENCODER,
     KNOB_MODE_WHEEL_VERTICAL,
     KNOB_MODE_WHEEL_HORIZONTAL,
-    KNOB_MODE_POINTER_VERTICAL,
-    KNOB_MODE_POINTER_HORIZONTAL,
-    KNOB_MODE_POINTER_DIAGONAL,
+    KNOB_MODE_DRAG_VERTICAL,
+    KNOB_MODE_DRAG_HORIZONTAL,
+    KNOB_MODE_DRAG_DIAGONAL,
     KNOB_MODE_MIDI,
     // KNOB_MODE_DAVINCI_RESOLVE,
 } knob_mode_t;
 
 typedef enum {
-    MIDI_RELATIVE_MODE_OFFSET,   // 64 = no change; 65..127 = +1..+63; 63..1 = -1..-63
-    MIDI_RELATIVE_MODE_TWOS,     // 0x00 = no change; 0x01..0x3F = +1..+63; 0x7F..0x40 = -1..-64
-    MIDI_RELATIVE_MODE_SIGNED,   // 0x00 = no change; 0x01..0x3F = +1..+63; 0x41..0x7F = -1..-63
-} midi_relative_mode_t;
+    MIDI_MODE_SIGNED,
+    MIDI_MODE_OFFSET,
+    MIDI_MODE_TWOS,
+} midi_mode_t;
 
 uint16_t get_as5600_raw(void);
 int16_t get_as5600_delta(void);
 
-void set_knob_mode(knob_mode_t mode);
 knob_mode_t get_knob_mode(void);
+void set_knob_mode(knob_mode_t mode);
 
+float get_knob_sensitivity(void);
+void set_knob_sensitivity(float sensitivity);
+
+bool get_knob_acceleration(void);
 void set_knob_acceleration(bool acceleration);
-uint16_t get_knob_acceleration(void);
 
-void set_knob_events_per_rotation(float events_per_rotation);
-float get_knob_events_per_rotation(void);
+uint8_t get_knob_midi_channel(void);
+void set_knob_midi_channel(uint8_t channel);
+
+uint8_t get_knob_midi_cc(void);
+void set_knob_midi_cc(uint8_t cc);
+
+midi_mode_t get_knob_midi_mode(void);
+void set_knob_midi_mode(midi_mode_t mode);

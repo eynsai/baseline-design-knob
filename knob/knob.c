@@ -87,21 +87,21 @@ static float ring_buffer_mean(ring_buffer_t* rb) {
 
 extern MidiDevice midi_device;
 
-void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_relative_mode_t mode) {
+void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t mode) {
     if (delta > 63)  delta = 63;
     if (delta < -63) delta = -63;
     uint8_t value = 0;
     if (delta == 0) {
-        if (mode == MIDI_RELATIVE_MODE_OFFSET) value = 64;
+        if (mode == MIDI_MODE_OFFSET) value = 64;
         else value = 0;
     } else {
         if (delta > 63)  delta = 63;
         if (delta < -63) delta = -63;
         switch (mode) {
-            case MIDI_RELATIVE_MODE_OFFSET:
+            case MIDI_MODE_OFFSET:
                 value = (uint8_t)(64 + delta);
                 break;
-            case MIDI_RELATIVE_MODE_TWOS:
+            case MIDI_MODE_TWOS:
                 if (delta > 0) value = (uint8_t)delta;
                 else {
                     int8_t d = delta;
@@ -109,7 +109,7 @@ void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_relative
                     value = v ? v : 0x40;
                 }
                 break;
-            case MIDI_RELATIVE_MODE_SIGNED: {
+            case MIDI_MODE_SIGNED: {
                 uint8_t mag = (uint8_t)((delta >= 0) ? delta : -delta);
                 uint8_t sign = (delta < 0) ? 0x40 : 0x00;
                 value = (uint8_t)(sign | mag);
@@ -130,10 +130,12 @@ void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_relative
 
 typedef struct {
     knob_mode_t mode;
+    float sensitivity;
     bool acceleration;
-    float events_per_rotation;
+    uint8_t midi_channel;
+    uint8_t midi_cc;
+    midi_mode_t midi_mode;
 } knob_config_t;
-knob_config_t knob_config = {0};
 
 typedef struct {
     uint32_t last_update_time;
@@ -141,8 +143,9 @@ typedef struct {
     int16_t accumulator;
     float remainder;
     ring_buffer_t acceleration_buffer;
-
 } knob_state_t;
+
+knob_config_t knob_config = {0};
 knob_state_t knob_state = {0};
 
 void reset_knob_state(void) {
@@ -196,24 +199,24 @@ void housekeeping_task_knob_modes(void) {
         }
     }
 
-    // scale delta, interpreting events_per_rotation differently based on mode
+    // scale delta, interpreting sensitivity differently based on mode
     switch (knob_config.mode) {
         case KNOB_MODE_OFF:
             return;  // unreachable
         case KNOB_MODE_ENCODER:
-            delta *= knob_config.events_per_rotation * (1.0 / 4096.0);
+            delta *= knob_config.sensitivity * (1.0 / 4096.0);
             break;
         case KNOB_MODE_WHEEL_VERTICAL:
         case KNOB_MODE_WHEEL_HORIZONTAL:
-            delta *= knob_config.events_per_rotation * (120.0 / 4096.0);
+            delta *= knob_config.sensitivity * (120.0 / 4096.0);
             break;
-        case KNOB_MODE_POINTER_VERTICAL:
-        case KNOB_MODE_POINTER_HORIZONTAL:
-        case KNOB_MODE_POINTER_DIAGONAL:
-            delta *= knob_config.events_per_rotation * (300.0 / 4096.0);
+        case KNOB_MODE_DRAG_VERTICAL:
+        case KNOB_MODE_DRAG_HORIZONTAL:
+        case KNOB_MODE_DRAG_DIAGONAL:
+            delta *= knob_config.sensitivity * (30.0 / 4096.0);
             break;
         case KNOB_MODE_MIDI:
-            delta *= knob_config.events_per_rotation * (1.0 / 4096.0);
+            delta *= knob_config.sensitivity * (1.0 / 4096.0);
             break;
     }
 
@@ -240,21 +243,21 @@ void housekeeping_task_knob_modes(void) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.h += delta_truncated;
         pointing_device_set_report(mouse);
-    } else if (knob_config.mode == KNOB_MODE_POINTER_VERTICAL) {
+    } else if (knob_config.mode == KNOB_MODE_DRAG_VERTICAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.y += delta_truncated * -1;
         pointing_device_set_report(mouse);
-    } else if (knob_config.mode == KNOB_MODE_POINTER_HORIZONTAL) {
+    } else if (knob_config.mode == KNOB_MODE_DRAG_HORIZONTAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.x += delta_truncated;
         pointing_device_set_report(mouse);
-    } else if (knob_config.mode == KNOB_MODE_POINTER_DIAGONAL) {
+    } else if (knob_config.mode == KNOB_MODE_DRAG_DIAGONAL) {
         report_mouse_t mouse = pointing_device_get_report();
         mouse.y += delta_truncated * -1;
         mouse.x += delta_truncated;
         pointing_device_set_report(mouse);
     } else if (knob_config.mode == KNOB_MODE_MIDI) {
-        midi_send_relative_cc(delta_truncated, 1, 1, MIDI_RELATIVE_MODE_OFFSET);
+        midi_send_relative_cc(delta_truncated, knob_config.midi_channel, knob_config.midi_cc, knob_config.midi_mode);
     }
     return;
 }
@@ -263,16 +266,37 @@ void housekeeping_task_knob_modes(void) {
 // PUBLIC KNOB API
 // ============================================================================
 
-void set_knob_mode(knob_mode_t mode) { reset_knob_state(); knob_config.mode = mode; }
 knob_mode_t get_knob_mode(void) { return knob_config.mode; }
+void set_knob_mode(knob_mode_t mode) {
+    knob_mode_t prev_mode = knob_config.mode;
+    if (prev_mode == KNOB_MODE_DRAG_VERTICAL || prev_mode == KNOB_MODE_DRAG_HORIZONTAL || prev_mode == KNOB_MODE_DRAG_DIAGONAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.buttons = pointing_device_handle_buttons(mouse.buttons, false, POINTING_DEVICE_BUTTON1);
+        pointing_device_set_report(mouse);
+    }
+    knob_config.mode = mode;
+    if (mode == KNOB_MODE_DRAG_VERTICAL || mode == KNOB_MODE_DRAG_HORIZONTAL || mode == KNOB_MODE_DRAG_DIAGONAL) {
+        report_mouse_t mouse = pointing_device_get_report();
+        mouse.buttons = pointing_device_handle_buttons(mouse.buttons, true, POINTING_DEVICE_BUTTON1);
+        pointing_device_set_report(mouse);
+    }
+    reset_knob_state();
+}
 
+float get_knob_sensitivity(void) { return knob_config.sensitivity; }
+void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
+
+bool get_knob_acceleration(void) { return knob_config.acceleration; }
 void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
-uint16_t get_knob_acceleration(void) { return knob_config.acceleration; }
 
-void set_knob_events_per_rotation(float events_per_rotation) { knob_config.events_per_rotation = events_per_rotation; }
-float get_knob_events_per_rotation(void) { return knob_config.events_per_rotation; }
+uint8_t get_knob_midi_channel(void) { return knob_config.midi_channel; }
+void set_knob_midi_channel(uint8_t channel) { knob_config.midi_channel = channel; }
 
-// TODO: void set_midi_config(uint8_t channel, uint8_t cc, ) {  }
+uint8_t get_knob_midi_cc(void) { return knob_config.midi_cc; }
+void set_knob_midi_cc(uint8_t cc) { knob_config.midi_cc = cc; }
+
+midi_mode_t get_knob_midi_mode(void) { return knob_config.midi_mode; }
+void set_knob_midi_mode(midi_mode_t mode) { knob_config.midi_mode = mode; }
 
 // ============================================================================
 // QMK HOOKS
@@ -306,7 +330,7 @@ DONE - Mouse move/drag (vertical/horizontal/diagonal, modifiers)
 - DaVinci Resolve
 
 Smooth modifiers:
-DONE - events_per_rotation
+DONE - sensitivity
 DONE - Smoothing window
 DONE - Acceleration
 
@@ -314,5 +338,6 @@ Other:
 - Layer control and ergonomics
 - Indicator lights (vs backlight RGB?)
 - MacOS compatibility?
+- Switches to enable/disable features
 
 */
