@@ -36,7 +36,7 @@ typedef enum {
 
 typedef struct {
     knob_mode_t mode;
-    float sensitivity;
+    int8_t sensitivity;
     bool acceleration;
 #    ifdef MIDI_ENABLE
     uint8_t midi_channel;
@@ -45,12 +45,13 @@ typedef struct {
 #    endif  // MIDI_ENABLE
 } knob_config_t;
 
+void reset_knob_config(void);
 knob_config_t get_knob_config(void);
 void set_knob_config(knob_config_t config);
 knob_mode_t get_knob_mode(void);
 void set_knob_mode(knob_mode_t mode);
-float get_knob_sensitivity(void);
-void set_knob_sensitivity(float sensitivity);
+uint8_t get_knob_sensitivity(void);
+void set_knob_sensitivity(uint8_t sensitivity);
 bool get_knob_acceleration(void);
 void set_knob_acceleration(bool acceleration);
 
