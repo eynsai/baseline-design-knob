@@ -12,14 +12,14 @@ int16_t get_as5600_delta(void);
 typedef enum {
     KNOB_MODE_OFF = 0,
 #    ifdef ENCODER_ENABLE
-KNOB_MODE_ENCODER,
+    KNOB_MODE_ENCODER,
 #    endif  // ENCODER_ENABLE
 #    ifdef POINTING_DEVICE_ENABLE
-KNOB_MODE_WHEEL_VERTICAL,
-KNOB_MODE_WHEEL_HORIZONTAL,
-KNOB_MODE_DRAG_VERTICAL,
-KNOB_MODE_DRAG_HORIZONTAL,
-KNOB_MODE_DRAG_DIAGONAL,
+    KNOB_MODE_WHEEL_VERTICAL,
+    KNOB_MODE_WHEEL_HORIZONTAL,
+    KNOB_MODE_DRAG_VERTICAL,
+    KNOB_MODE_DRAG_HORIZONTAL,
+    KNOB_MODE_DRAG_DIAGONAL,
 #    endif  // POINTING_DEVICE_ENABLE
 #    ifdef MIDI_ENABLE
     KNOB_MODE_MIDI,
@@ -36,8 +36,9 @@ typedef enum {
 
 typedef struct {
     knob_mode_t mode;
-    int8_t sensitivity;
+    uint8_t sensitivity;
     bool acceleration;
+    bool reverse;
 #    ifdef MIDI_ENABLE
     uint8_t midi_channel;
     uint8_t midi_cc;
@@ -54,6 +55,8 @@ uint8_t get_knob_sensitivity(void);
 void set_knob_sensitivity(uint8_t sensitivity);
 bool get_knob_acceleration(void);
 void set_knob_acceleration(bool acceleration);
+bool get_knob_reverse(void);
+void set_knob_reverse(bool reverse);
 
 #    ifdef MIDI_ENABLE
 uint8_t get_knob_midi_channel(void);

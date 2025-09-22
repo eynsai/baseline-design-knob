@@ -20,7 +20,7 @@
 int16_t as5600_raw = 0;
 int16_t as5600_delta = 0;
 
-void housekeeping_task_read_as5600(void) {
+static void housekeeping_task_read_as5600(void) {
 
     // save previous raw angle
     int16_t as5600_raw_prev = as5600_raw;
@@ -107,7 +107,7 @@ static float ring_buffer_mean(ring_buffer_t* rb) {
 
 extern MidiDevice midi_device;
 
-void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t mode) {
+static void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_mode_t mode) {
     if (delta > 63)  delta = 63;
     if (delta < -63) delta = -63;
     uint8_t value = 0;
@@ -173,7 +173,7 @@ void reset_knob_state(void) {
     ring_buffer_reset(&knob_state.acceleration_buffer);
 }
 
-void housekeeping_task_knob_modes(void) {
+static void housekeeping_task_knob_modes(void) {
 
     // skip everything if the knob is set to off
     if (knob_config.mode == KNOB_MODE_OFF) {
@@ -218,7 +218,7 @@ void housekeeping_task_knob_modes(void) {
         }
     }
 
-    // scale delta, interpreting sensitivity differently based on mode
+    // apply sensitivity
     switch (knob_config.mode) {
         case KNOB_MODE_OFF:
             return;  // unreachable
@@ -240,6 +240,11 @@ void housekeeping_task_knob_modes(void) {
             delta *= knob_config.sensitivity * (1.0 / 4096.0);
             break;
 #    endif  // MIDI_ENABLE
+    }
+
+    // apply reverse
+    if (knob_config.reverse) {
+        delta *= -1;
     }
 
     // truncate to integer and save remainder
@@ -340,6 +345,7 @@ void set_knob_mode(knob_mode_t mode) {
 void reset_knob_config(void) {
     knob_config.sensitivity = 10;
     knob_config.acceleration = false;
+    knob_config.reverse = false;
 #    ifdef MIDI_ENABLE
     knob_config.midi_channel = 0;
     knob_config.midi_cc = 0;
@@ -349,10 +355,12 @@ void reset_knob_config(void) {
 }
 knob_config_t get_knob_config(void) { return knob_config; }
 void set_knob_config(knob_config_t config) { knob_config = config; set_knob_mode(config.mode); }
-float get_knob_sensitivity(void) { return knob_config.sensitivity; }
-void set_knob_sensitivity(float sensitivity) { knob_config.sensitivity = sensitivity; }
+uint8_t get_knob_sensitivity(void) { return knob_config.sensitivity; }
+void set_knob_sensitivity(uint8_t sensitivity) { knob_config.sensitivity = sensitivity; }
 bool get_knob_acceleration(void) { return knob_config.acceleration; }
 void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
+bool get_knob_reverse(void) { return knob_config.reverse; }
+void set_knob_reverse(bool reverse) { knob_config.reverse = reverse; }
 
 #    ifdef MIDI_ENABLE
 uint8_t get_knob_midi_channel(void) { return knob_config.midi_channel; }

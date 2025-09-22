@@ -1,0 +1,318 @@
+{
+    "name": "KNOB V2.1",
+    "vendorId": "0x4244",
+    "productId": "0x4B4E",
+    "matrix": {"rows": 1, "cols": 3},
+    "layouts": {"keymap": [[{"y": 4, "x": 1, "a": 4}, "0,0", "0,1", "0,2"]]},
+    "menus": [
+        {
+            "label": "KNOB Options",
+            "content": [
+                {
+                    "label": "Layer 0",
+                    "content": [
+                        {
+                            "label": "Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Off", 0],
+                                ["Encoder", 1],
+                                ["Scrolling (Vertical)", 2],
+                                ["Scrolling (Horizontal)", 3],
+                                ["Drag (Vertical)", 4],
+                                ["Drag (Horizontal)", 5],
+                                ["Drag (Diagonal)", 6],
+                                ["MIDI Relative CC", 7]
+                            ],
+                            "content": ["id_layer_0_mode", 0, 0]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} != 0",
+                            "label": "Sensitivity",
+                            "type": "range",
+                            "options": [1, 255],
+                            "content": ["id_layer_0_sensitivity", 0, 1]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} != 0",
+                            "label": "Reverse Direction",
+                            "type": "toggle",
+                            "content": ["id_layer_0_reverse", 0, 2]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} != 0",
+                            "label": "Acceleration",
+                            "type": "toggle",
+                            "content": ["id_layer_0_acceleration", 0, 3]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} == 1",
+                            "label": "Keycode (Clockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_0_encoder_keycode_cw", 0, 4]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} == 1",
+                            "label": "Keycode (Counterclockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_0_encoder_keycode_ccw", 0, 5]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} == 7",
+                            "label": "MIDI Channel",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_0_midi_channel", 0, 6]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} == 7",
+                            "label": "MIDI CC",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_0_midi_cc", 0, 7]
+                        },
+                        {
+                            "showIf": "{id_layer_0_mode} == 7",
+                            "label": "MIDI Relative Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Signed", 0],
+                                ["Offset", 1],
+                                ["Twos Complement", 2]
+                            ],
+                            "content": ["id_layer_0_midi_mode", 0, 8]
+                        }
+                    ]
+                },
+                {
+                    "label": "Layer 1",
+                    "content": [
+                        {
+                            "label": "Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Off", 0],
+                                ["Encoder", 1],
+                                ["Scrolling (Vertical)", 2],
+                                ["Scrolling (Horizontal)", 3],
+                                ["Drag (Vertical)", 4],
+                                ["Drag (Horizontal)", 5],
+                                ["Drag (Diagonal)", 6],
+                                ["MIDI Relative CC", 7]
+                            ],
+                            "content": ["id_layer_1_mode", 0, 10]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} != 0",
+                            "label": "Sensitivity",
+                            "type": "range",
+                            "options": [1, 255],
+                            "content": ["id_layer_1_sensitivity", 0, 11]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} != 0",
+                            "label": "Reverse Direction",
+                            "type": "toggle",
+                            "content": ["id_layer_1_reverse", 0, 12]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} != 0",
+                            "label": "Acceleration",
+                            "type": "toggle",
+                            "content": ["id_layer_1_acceleration", 0, 13]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} == 1",
+                            "label": "Keycode (Clockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_1_encoder_keycode_cw", 0, 14]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} == 1",
+                            "label": "Keycode (Counterclockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_1_encoder_keycode_ccw", 0, 15]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} == 7",
+                            "label": "MIDI Channel",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_1_midi_channel", 0, 16]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} == 7",
+                            "label": "MIDI CC",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_1_midi_cc", 0, 17]
+                        },
+                        {
+                            "showIf": "{id_layer_1_mode} == 7",
+                            "label": "MIDI Relative Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Signed", 0],
+                                ["Offset", 1],
+                                ["Twos Complement", 2]
+                            ],
+                            "content": ["id_layer_1_midi_mode", 0, 18]
+                        }
+                    ]
+                },
+                {
+                    "label": "Layer 2",
+                    "content": [
+                        {
+                            "label": "Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Off", 0],
+                                ["Encoder", 1],
+                                ["Scrolling (Vertical)", 2],
+                                ["Scrolling (Horizontal)", 3],
+                                ["Drag (Vertical)", 4],
+                                ["Drag (Horizontal)", 5],
+                                ["Drag (Diagonal)", 6],
+                                ["MIDI Relative CC", 7]
+                            ],
+                            "content": ["id_layer_2_mode", 0, 20]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} != 0",
+                            "label": "Sensitivity",
+                            "type": "range",
+                            "options": [1, 255],
+                            "content": ["id_layer_2_sensitivity", 0, 21]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} != 0",
+                            "label": "Reverse Direction",
+                            "type": "toggle",
+                            "content": ["id_layer_2_reverse", 0, 22]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} != 0",
+                            "label": "Acceleration",
+                            "type": "toggle",
+                            "content": ["id_layer_2_acceleration", 0, 23]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} == 1",
+                            "label": "Keycode (Clockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_2_encoder_keycode_cw", 0, 24]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} == 1",
+                            "label": "Keycode (Counterclockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_2_encoder_keycode_ccw", 0, 25]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} == 7",
+                            "label": "MIDI Channel",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_2_midi_channel", 0, 26]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} == 7",
+                            "label": "MIDI CC",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_2_midi_cc", 0, 27]
+                        },
+                        {
+                            "showIf": "{id_layer_2_mode} == 7",
+                            "label": "MIDI Relative Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Signed", 0],
+                                ["Offset", 1],
+                                ["Twos Complement", 2]
+                            ],
+                            "content": ["id_layer_2_midi_mode", 0, 28]
+                        }
+                    ]
+                },
+                {
+                    "label": "Layer 3",
+                    "content": [
+                        {
+                            "label": "Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Off", 0],
+                                ["Encoder", 1],
+                                ["Scrolling (Vertical)", 2],
+                                ["Scrolling (Horizontal)", 3],
+                                ["Drag (Vertical)", 4],
+                                ["Drag (Horizontal)", 5],
+                                ["Drag (Diagonal)", 6],
+                                ["MIDI Relative CC", 7]
+                            ],
+                            "content": ["id_layer_3_mode", 0, 30]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} != 0",
+                            "label": "Sensitivity",
+                            "type": "range",
+                            "options": [1, 255],
+                            "content": ["id_layer_3_sensitivity", 0, 31]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} != 0",
+                            "label": "Reverse Direction",
+                            "type": "toggle",
+                            "content": ["id_layer_3_reverse", 0, 32]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} != 0",
+                            "label": "Acceleration",
+                            "type": "toggle",
+                            "content": ["id_layer_3_acceleration", 0, 33]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} == 1",
+                            "label": "Keycode (Clockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_3_encoder_keycode_cw", 0, 34]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} == 1",
+                            "label": "Keycode (Counterclockwise)",
+                            "type": "keycode",
+                            "content": ["id_layer_3_encoder_keycode_ccw", 0, 35]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} == 7",
+                            "label": "MIDI Channel",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_3_midi_channel", 0, 36]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} == 7",
+                            "label": "MIDI CC",
+                            "type": "range",
+                            "options": [0, 127],
+                            "content": ["id_layer_3_midi_cc", 0, 37]
+                        },
+                        {
+                            "showIf": "{id_layer_3_mode} == 7",
+                            "label": "MIDI Relative Mode",
+                            "type": "dropdown",
+                            "options": [
+                                ["Signed", 0],
+                                ["Offset", 1],
+                                ["Twos Complement", 2]
+                            ],
+                            "content": ["id_layer_3_midi_mode", 0, 38]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
