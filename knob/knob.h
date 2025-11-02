@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
+#include "pointing_device.h"
 #include "quantum.h"
 
 uint16_t get_as5600_raw(void);
@@ -20,6 +21,9 @@ typedef enum {
     KNOB_MODE_DRAG_VERTICAL,
     KNOB_MODE_DRAG_HORIZONTAL,
     KNOB_MODE_DRAG_DIAGONAL,
+    KNOB_MODE_ADAPTIVE_DRAG_VERTICAL,
+    KNOB_MODE_ADAPTIVE_DRAG_HORIZONTAL,
+    KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL,
 #    endif  // POINTING_DEVICE_ENABLE
 #    ifdef MIDI_ENABLE
     KNOB_MODE_MIDI,
@@ -39,6 +43,10 @@ typedef struct {
     uint8_t sensitivity;
     bool acceleration;
     bool reverse;
+#    ifdef POINTING_DEVICE_ENABLE
+    pointing_device_buttons_t drag_button;
+    uint8_t drag_modifiers;
+#    endif  // POINTING_DEVICE_ENABLE
 #    ifdef MIDI_ENABLE
     uint8_t midi_channel;
     uint8_t midi_cc;
@@ -46,25 +54,24 @@ typedef struct {
 #    endif  // MIDI_ENABLE
 } knob_config_t;
 
-void reset_knob_config(void);
+static const knob_config_t default_knob_config = {
+    .mode = KNOB_MODE_OFF,
+    .sensitivity = 10,
+    .acceleration = false,
+    .reverse = false,
+#    ifdef POINTING_DEVICE_ENABLE
+    .drag_button = POINTING_DEVICE_BUTTON1,
+    .drag_modifiers = 0,
+#    endif  // POINTING_DEVICE_ENABLE
+#    ifdef MIDI_ENABLE
+    .midi_channel = 0,
+    .midi_cc = 0,
+    .midi_mode = MIDI_MODE_SIGNED,
+#    endif
+};
+
 knob_config_t get_knob_config(void);
 void set_knob_config(knob_config_t config);
-knob_mode_t get_knob_mode(void);
-void set_knob_mode(knob_mode_t mode);
-uint8_t get_knob_sensitivity(void);
-void set_knob_sensitivity(uint8_t sensitivity);
-bool get_knob_acceleration(void);
-void set_knob_acceleration(bool acceleration);
-bool get_knob_reverse(void);
-void set_knob_reverse(bool reverse);
-
-#    ifdef MIDI_ENABLE
-uint8_t get_knob_midi_channel(void);
-void set_knob_midi_channel(uint8_t channel);
-uint8_t get_knob_midi_cc(void);
-void set_knob_midi_cc(uint8_t cc);
-midi_mode_t get_knob_midi_mode(void);
-void set_knob_midi_mode(midi_mode_t mode);
-#    endif  // MIDI_ENABLE
+void reset_knob_config(void);
 
 #endif  // !KNOB_MINIMAL

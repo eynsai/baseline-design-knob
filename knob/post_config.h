@@ -23,4 +23,12 @@
 #        define KNOB_ACCELERATION_BLEND 0.872116
 #    endif
 
+#    ifndef KNOB_ADAPTIVE_DRAG_ON_DELAY
+#        define KNOB_ADAPTIVE_DRAG_ON_DELAY 100
+#    endif
+
+#    ifndef KNOB_ADAPTIVE_DRAG_OFF_DELAY
+#        define KNOB_ADAPTIVE_DRAG_OFF_DELAY 100
+#    endif
+
 #endif  // !KNOB_MINIMAL

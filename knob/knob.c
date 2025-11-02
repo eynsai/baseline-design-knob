@@ -2,9 +2,14 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <math.h>
+
+#include "baseline_design/knob/post_config.h"
 #include "i2c_master.h"
+#include "modifiers.h"
 #include "pointing_device.h"
 #include "report.h"
+#include "timer.h"
+
 #include "knob.h"
 
 // ============================================================================
@@ -65,11 +70,15 @@ int16_t get_as5600_delta(void) {
     return as5600_delta;
 }
 
+#ifndef KNOB_MINIMAL
+
 // ============================================================================
-// RING BUFFERS FOR ACCELERATION
+// ACCELERATION HELPERS
 // ============================================================================
 
-#ifndef KNOB_MINIMAL
+#    define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
+#    define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
+#    define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
 
 typedef struct {
     float items[KNOB_ACCELERATION_BUFFER_SIZE];
@@ -98,6 +107,60 @@ static void ring_buffer_push(ring_buffer_t* rb, float item) {
 static float ring_buffer_mean(ring_buffer_t* rb) {
     return rb->current_size > 0 ? rb->current_sum / rb->current_size : 0;
 }
+
+// ============================================================================
+// KNOB STATE
+// ============================================================================
+
+#    ifdef POINTING_DEVICE_ENABLE
+typedef enum {
+    DRAG_STATE_DEACTIVATED = 0,
+    DRAG_STATE_ACTIVATING,
+    DRAG_STATE_ACTIVATED,
+} drag_state_t;
+#    endif  // POINTING_DEVICE_ENABLE
+
+typedef struct {
+    uint32_t last_motion_time;
+    uint32_t last_action_time;
+    int16_t accumulator;
+    float remainder;
+    ring_buffer_t acceleration_buffer;
+#    ifdef POINTING_DEVICE_ENABLE
+    drag_state_t drag_state;
+    uint32_t drag_time; 
+#    endif  // POINTING_DEVICE_ENABLE
+} knob_state_t;
+
+knob_config_t knob_config = {0};
+knob_state_t knob_state = {0};
+uint32_t current_time = 0;
+
+// ============================================================================
+// DRAG HELPERS
+// ============================================================================
+
+#    ifdef POINTING_DEVICE_ENABLE
+
+void start_dragging(void) {
+    report_mouse_t mouse = pointing_device_get_report();
+    mouse.buttons = pointing_device_handle_buttons(mouse.buttons, true, knob_config.drag_button);
+    pointing_device_set_report(mouse);
+    if (knob_config.drag_modifiers != 0) {
+        register_mods(knob_config.drag_modifiers);
+    }
+}
+
+void stop_dragging(void) {
+    report_mouse_t mouse = pointing_device_get_report();
+    mouse.buttons = pointing_device_handle_buttons(mouse.buttons, false, knob_config.drag_button);
+    pointing_device_set_report(mouse);
+    if (knob_config.drag_modifiers != 0) {
+        unregister_mods(knob_config.drag_modifiers);
+    }
+}
+
+#    endif  // POINTING_DEVICE_ENABLE
 
 // ============================================================================
 // MIDI HELPERS
@@ -147,33 +210,18 @@ static void midi_send_relative_cc(int delta, uint8_t channel, uint8_t cc, midi_m
 // KNOB FUNCTIONALITY
 // ============================================================================
 
-#    define ACCELERATION_CONST_P ((float) KNOB_ACCELERATION_BLEND / (float) KNOB_ACCELERATION_SCALE)
-#    define ACCELERATION_CONST_Q ((float) KNOB_ACCELERATION_BLEND + 1.0)
-#    define ACCELERATION_CONST_R ((float) KNOB_ACCELERATION_SCALE)
-
-typedef struct {
-    uint32_t last_update_time;
-    uint32_t last_mouse_time;
-    int16_t backlash;
-    int16_t accumulator;
-    float remainder;
-    ring_buffer_t acceleration_buffer;
-} knob_state_t;
-
-knob_config_t knob_config = {0};
-knob_state_t knob_state = {0};
-
 void reset_knob_state(void) {
-    uint32_t time = timer_read32();
-    knob_state.last_update_time = time;
-    knob_state.last_mouse_time = time;
-    knob_state.backlash = 0;
+    knob_state.last_motion_time = current_time;
+    knob_state.last_action_time = current_time;
     knob_state.accumulator = 0;
     knob_state.remainder = 0;
     ring_buffer_reset(&knob_state.acceleration_buffer);
 }
 
 static void housekeeping_task_knob_modes(void) {
+
+    // avoid repeated timer reads by doing it once and saving the value
+    current_time = timer_read32();
 
     // skip everything if the knob is set to off
     if (knob_config.mode == KNOB_MODE_OFF) {
@@ -182,20 +230,20 @@ static void housekeeping_task_knob_modes(void) {
 
     // reset state after a period of no activity
     if (as5600_delta == 0) {
-        if (timer_elapsed32(knob_state.last_update_time) > KNOB_TIMEOUT_MS) {
+        if (TIMER_DIFF_32(current_time, knob_state.last_motion_time) > KNOB_TIMEOUT_MS) {
             reset_knob_state();
             return;
         }
     } else {
         knob_state.accumulator += as5600_delta;
-        knob_state.last_update_time = timer_read32();
+        knob_state.last_motion_time = current_time;
     }
 
     // throttle rate at which actions are performed
-    if (timer_elapsed32(knob_state.last_mouse_time) < KNOB_THROTTLE_MS) {
+    if (TIMER_DIFF_32(current_time, knob_state.last_action_time) < KNOB_THROTTLE_MS) {
         return;
     }
-    knob_state.last_mouse_time = timer_read32();
+    knob_state.last_action_time = current_time;
 
     // zero out the accumulator when ready to perform an action
     float delta = knob_state.accumulator;
@@ -231,7 +279,7 @@ static void housekeeping_task_knob_modes(void) {
         case KNOB_MODE_WHEEL_VERTICAL...KNOB_MODE_WHEEL_HORIZONTAL:
             delta *= knob_config.sensitivity * (120.0 / 4096.0);
             break;
-        case KNOB_MODE_DRAG_VERTICAL...KNOB_MODE_DRAG_DIAGONAL:
+        case KNOB_MODE_DRAG_VERTICAL...KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL:
             delta *= knob_config.sensitivity * (30.0 / 4096.0);
             break;
 #    endif  // POINTING_DEVICE_ENABLE
@@ -253,6 +301,9 @@ static void housekeeping_task_knob_modes(void) {
     knob_state.remainder = delta - delta_truncated;
     
     // apply action
+#    ifdef POINTING_DEVICE_ENABLE
+    report_mouse_t mouse;
+#    endif  // POINTING_DEVICE_ENABLE
     switch (knob_config.mode) {
 #    ifdef ENCODER_ENABLE
         case KNOB_MODE_ENCODER:
@@ -267,11 +318,11 @@ static void housekeeping_task_knob_modes(void) {
             break;
 #    endif  // ENCODER_ENABLE
 #    ifdef POINTING_DEVICE_ENABLE
-        case KNOB_MODE_WHEEL_VERTICAL...KNOB_MODE_DRAG_DIAGONAL:
+        case KNOB_MODE_WHEEL_VERTICAL...KNOB_MODE_DRAG_DIAGONAL: 
             if (delta_truncated == 0) {
                 break;
             }
-            report_mouse_t mouse = pointing_device_get_report();
+            mouse = pointing_device_get_report();
             switch (knob_config.mode) {
                 case KNOB_MODE_WHEEL_VERTICAL:
                     mouse.v += delta_truncated * -1;
@@ -294,6 +345,48 @@ static void housekeeping_task_knob_modes(void) {
             }
             pointing_device_set_report(mouse);
             break;
+        case KNOB_MODE_ADAPTIVE_DRAG_VERTICAL...KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL:
+            switch (knob_state.drag_state) {
+                case DRAG_STATE_DEACTIVATED:
+                    if (delta_truncated != 0) {
+                        knob_state.drag_state = DRAG_STATE_ACTIVATING;
+                        knob_state.drag_time = current_time;
+                        start_dragging();
+                    }
+                    break;
+                case DRAG_STATE_ACTIVATING:
+                    if (TIMER_DIFF_32(current_time, knob_state.drag_time) >= KNOB_ADAPTIVE_DRAG_ON_DELAY) {
+                        knob_state.drag_state = DRAG_STATE_ACTIVATED;
+                    }
+                    break;
+                case DRAG_STATE_ACTIVATED:
+                    if (delta_truncated != 0) {
+                        knob_state.drag_time = current_time;
+                        mouse = pointing_device_get_report();
+                        switch (knob_config.mode) {
+                            case KNOB_MODE_ADAPTIVE_DRAG_VERTICAL:
+                                mouse.y += delta_truncated * -1;
+                                break;
+                            case KNOB_MODE_ADAPTIVE_DRAG_HORIZONTAL:
+                                mouse.x += delta_truncated;
+                                break;
+                            case KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL:
+                                mouse.y += delta_truncated * -1;
+                                mouse.x += delta_truncated;
+                                break;
+                            default:
+                                return;  // unreachable
+                        }
+                        pointing_device_set_report(mouse);
+                    } else {
+                        if (TIMER_DIFF_32(current_time, knob_state.drag_time) >= KNOB_ADAPTIVE_DRAG_OFF_DELAY) {
+                            knob_state.drag_state = DRAG_STATE_DEACTIVATED;
+                            stop_dragging();
+                        }
+                    }
+                    break;
+            }
+            break;
 #    endif  // POINTING_DEVICE_ENABLE
 #    ifdef MIDI_ENABLE
         case KNOB_MODE_MIDI:
@@ -310,66 +403,36 @@ static void housekeeping_task_knob_modes(void) {
 // PUBLIC KNOB API
 // ============================================================================
 
-knob_mode_t get_knob_mode(void) { return knob_config.mode; }
 void set_knob_mode(knob_mode_t mode) {
-    if (mode == knob_config.mode) {
-        return;
-    }
 #    ifdef POINTING_DEVICE_ENABLE
-    report_mouse_t mouse;
-    switch (knob_config.mode) {
-        case KNOB_MODE_DRAG_VERTICAL...KNOB_MODE_DRAG_DIAGONAL:
-            mouse = pointing_device_get_report();
-            mouse.buttons = pointing_device_handle_buttons(mouse.buttons, false, POINTING_DEVICE_BUTTON1);
-            pointing_device_set_report(mouse);
-            break;
-        default:
-            break;
-    }
-#    endif  // POINTING_DEVICE_ENABLE
-    knob_config.mode = mode;
-#    ifdef POINTING_DEVICE_ENABLE
-    switch (knob_config.mode) {
-        case KNOB_MODE_DRAG_VERTICAL...KNOB_MODE_DRAG_DIAGONAL:
-            mouse = pointing_device_get_report();
-            mouse.buttons = pointing_device_handle_buttons(mouse.buttons, true, POINTING_DEVICE_BUTTON1);
-            pointing_device_set_report(mouse);
-            break;
-        default:
-            break;
+    if ((KNOB_MODE_DRAG_VERTICAL <= knob_config.mode) && (knob_config.mode <= KNOB_MODE_DRAG_DIAGONAL)) {
+        stop_dragging();
     }
 #    endif  // POINTING_DEVICE_ENABLE
     reset_knob_state();
+    knob_config.mode = mode;
+#    ifdef POINTING_DEVICE_ENABLE
+    if ((KNOB_MODE_DRAG_VERTICAL <= knob_config.mode) && (knob_config.mode <= KNOB_MODE_DRAG_DIAGONAL)) {
+        start_dragging();
+    }
+    if ((KNOB_MODE_ADAPTIVE_DRAG_VERTICAL <= knob_config.mode) && (knob_config.mode <= KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL)) {
+        knob_state.drag_state = DRAG_STATE_DEACTIVATED;
+    }
+#    endif  // POINTING_DEVICE_ENABLE
+}
+
+knob_config_t get_knob_config(void) {
+    return knob_config;
+}
+
+void set_knob_config(knob_config_t config) {
+    set_knob_mode(config.mode);
+    knob_config = config;
 }
 
 void reset_knob_config(void) {
-    knob_config.sensitivity = 10;
-    knob_config.acceleration = false;
-    knob_config.reverse = false;
-#    ifdef MIDI_ENABLE
-    knob_config.midi_channel = 0;
-    knob_config.midi_cc = 0;
-    knob_config.midi_mode = MIDI_MODE_SIGNED;
-#    endif  // MIDI_ENABLE
-    set_knob_mode(KNOB_MODE_OFF);
+    set_knob_config(default_knob_config);
 }
-knob_config_t get_knob_config(void) { return knob_config; }
-void set_knob_config(knob_config_t config) { knob_config = config; set_knob_mode(config.mode); }
-uint8_t get_knob_sensitivity(void) { return knob_config.sensitivity; }
-void set_knob_sensitivity(uint8_t sensitivity) { knob_config.sensitivity = sensitivity; }
-bool get_knob_acceleration(void) { return knob_config.acceleration; }
-void set_knob_acceleration(bool acceleration) { knob_config.acceleration = acceleration; }
-bool get_knob_reverse(void) { return knob_config.reverse; }
-void set_knob_reverse(bool reverse) { knob_config.reverse = reverse; }
-
-#    ifdef MIDI_ENABLE
-uint8_t get_knob_midi_channel(void) { return knob_config.midi_channel; }
-void set_knob_midi_channel(uint8_t channel) { knob_config.midi_channel = channel; }
-uint8_t get_knob_midi_cc(void) { return knob_config.midi_cc; }
-void set_knob_midi_cc(uint8_t cc) { knob_config.midi_cc = cc; }
-midi_mode_t get_knob_midi_mode(void) { return knob_config.midi_mode; }
-void set_knob_midi_mode(midi_mode_t mode) { knob_config.midi_mode = mode; }
-#    endif  // MIDI_ENABLE
 
 #endif // !KNOB_MINIMAL
 
@@ -380,8 +443,8 @@ void set_knob_midi_mode(midi_mode_t mode) { knob_config.midi_mode = mode; }
 void keyboard_pre_init_kb(void){
     i2c_init();
 #ifndef KNOB_MINIMAL
+    current_time = timer_read32();
     reset_knob_config();
-    reset_knob_state();
 #endif // !KNOB_MINIMAL
     keyboard_pre_init_user();
 }
