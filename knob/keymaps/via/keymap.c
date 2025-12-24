@@ -1,6 +1,7 @@
 // Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "keycodes.h"
 #include "rgblight.h"
 #include QMK_KEYBOARD_H
 #include "quantum.h"
@@ -12,14 +13,14 @@
 
 // clang-format off
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
-    [0] = LAYOUT(TO(7), KC_NO, TO(1)),
-    [1] = LAYOUT(TO(0), KC_NO, TO(2)),
-    [2] = LAYOUT(TO(1), KC_NO, TO(3)),
-    [3] = LAYOUT(TO(2), KC_NO, TO(4)),
-    [4] = LAYOUT(TO(3), KC_NO, TO(5)),
-    [5] = LAYOUT(TO(4), KC_NO, TO(6)),
-    [6] = LAYOUT(TO(5), KC_NO, TO(7)),
-    [7] = LAYOUT(TO(6), KC_NO, TO(0))
+    [0] = LAYOUT(LT(2, KC_MPRV),    KC_MPLY,            KC_MNXT     ),
+    [1] = LAYOUT(LT(2, KC_HOME),    KC_LSFT,            KC_END      ),
+    [2] = LAYOUT(_______,           TO(0),              TO(1)       ),
+    [3] = LAYOUT(_______,           _______,            _______     ),
+    [4] = LAYOUT(_______,           _______,            _______     ),
+    [5] = LAYOUT(_______,           _______,            _______     ),
+    [6] = LAYOUT(_______,           _______,            _______     ),
+    [7] = LAYOUT(_______,           _______,            _______     )
 };
 // clang-format on
 
@@ -72,7 +73,7 @@ void update_active_config(void) {
     knob_config_t knob_config = default_knob_config;
 
     // set parameters used by all modes
-    knob_config.sensitivity = custom_config.layers[highest_layer][id_sensitivity] * 16;
+    knob_config.sensitivity = custom_config.layers[highest_layer][id_sensitivity] + 1;
     knob_config.acceleration = custom_config.layers[highest_layer][id_acceleration];
     knob_config.reverse = custom_config.layers[highest_layer][id_reverse];
     if (custom_config.layers[highest_layer][id_backlight]) {
@@ -197,6 +198,28 @@ void keyboard_post_init_user(void) {
 // called when EEPROM is reset
 void eeconfig_init_user(void) {
     memset(&custom_config, 0, sizeof(custom_config_t));
+
+    custom_config.layers[0][id_mode] = KNOB_MODE_ENCODER;
+    custom_config.layers[0][id_backlight] = 1;
+    custom_config.layers[0][id_sensitivity] = KNOB_VIA_DEFAULT_SENS_0;
+    custom_config.layers[0][id_reverse] = 0;
+    custom_config.layers[0][id_backlight_color] = KNOB_VIA_DEFAULT_HUE_0;  // hue
+    custom_config.layers[0][id_backlight_color + 1] = KNOB_VIA_DEFAULT_SAT_0;  // saturation
+    custom_config.layers[0][id_encoder_keycode_cw] = (KC_VOLU >> 8) & 0xFFFF;  // MSB
+    custom_config.layers[0][id_encoder_keycode_cw + 1] = KC_VOLU & 0xFFFF;  // LSB
+    custom_config.layers[0][id_encoder_keycode_ccw] = (KC_VOLD >> 8) & 0xFFFF;  // MSB
+    custom_config.layers[0][id_encoder_keycode_ccw + 1] = KC_VOLD & 0xFFFF;  // LSB
+
+    custom_config.layers[1][id_mode] = KNOB_MODE_WHEEL_VERTICAL;
+    custom_config.layers[1][id_backlight] = 1;
+    custom_config.layers[1][id_sensitivity] = KNOB_VIA_DEFAULT_SENS_1;
+    custom_config.layers[1][id_reverse] = 1;
+    custom_config.layers[1][id_backlight_color] = KNOB_VIA_DEFAULT_HUE_1;  // hue
+    custom_config.layers[1][id_backlight_color + 1] = KNOB_VIA_DEFAULT_SAT_1;  // saturation
+
+    custom_config.layers[2][id_mode] = KNOB_MODE_OFF;
+    custom_config.layers[2][id_backlight] = 0;
+
     via_update_custom_config((const void *)&custom_config, 0, sizeof(custom_config_t));
     update_active_config();
 }

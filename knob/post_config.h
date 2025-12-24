@@ -31,4 +31,20 @@
 #        define KNOB_ADAPTIVE_DRAG_OFF_DELAY 100
 #    endif
 
-#endif  // !KNOB_MINIMAL
+#    ifndef KNOB_SENS_SCALE_ENCODER
+#        define KNOB_SENS_SCALE_ENCODER (1.0 / 4096.0)
+#    endif
+
+#    ifndef KNOB_SENS_SCALE_WHEEL
+#        define KNOB_SENS_SCALE_WHEEL (120.0 / 4096.0)
+#    endif
+
+#    ifndef KNOB_SENS_SCALE_DRAG
+#        define KNOB_SENS_SCALE_DRAG (30.0 / 4096.0)
+#    endif
+
+#    ifndef KNOB_SENS_SCALE_MIDI
+#        define KNOB_SENS_SCALE_MIDI (1.0 / 4096.0)
+#    endif
+
+#endif

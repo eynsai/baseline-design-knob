@@ -272,20 +272,20 @@ static void housekeeping_task_knob_modes(void) {
             return;  // unreachable
 #    ifdef ENCODER_ENABLE
         case KNOB_MODE_ENCODER:
-            delta *= knob_config.sensitivity * (1.0 / 4096.0);
+            delta *= knob_config.sensitivity * KNOB_SENS_SCALE_ENCODER;
             break;
 #    endif  // ENCODER_ENABLE
 #    ifdef POINTING_DEVICE_ENABLE
         case KNOB_MODE_WHEEL_VERTICAL...KNOB_MODE_WHEEL_HORIZONTAL:
-            delta *= knob_config.sensitivity * (120.0 / 4096.0);
+            delta *= knob_config.sensitivity * KNOB_SENS_SCALE_WHEEL;
             break;
         case KNOB_MODE_DRAG_VERTICAL...KNOB_MODE_ADAPTIVE_DRAG_DIAGONAL:
-            delta *= knob_config.sensitivity * (30.0 / 4096.0);
+            delta *= knob_config.sensitivity * KNOB_SENS_SCALE_DRAG;
             break;
 #    endif  // POINTING_DEVICE_ENABLE
 #    ifdef MIDI_ENABLE
         case KNOB_MODE_MIDI:
-            delta *= knob_config.sensitivity * (1.0 / 4096.0);
+            delta *= knob_config.sensitivity * KNOB_SENS_SCALE_MIDI;
             break;
 #    endif  // MIDI_ENABLE
     }
