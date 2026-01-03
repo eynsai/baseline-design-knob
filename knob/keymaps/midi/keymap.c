@@ -1,6 +1,7 @@
 // Copyright 2025 Morgan Newell Sun (@eynsai)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "baseline_design/knob/knob.h"
 #include QMK_KEYBOARD_H
 #include "quantum.h"
 #include "knob.h"
@@ -46,15 +47,16 @@ void colormap(int index, bool on) {
 void keyboard_pre_init_user(void) {
 
     // set knob settings
-    set_knob_mode(KNOB_MODE_MIDI);
-    set_knob_sensitivity(128);
-    set_knob_midi_channel(0);  // not necessary since it's the default
-    set_knob_midi_cc(0);  // not necessary since it's the default
-
-    // set the relative midi mode (consult your daw manual)
-    set_knob_midi_mode(MIDI_MODE_SIGNED);
-    // set_knob_midi_mode(MIDI_MODE_OFFSET);
-    // set_knob_midi_mode(MIDI_MODE_TWOS);
+    knob_config_t config = {
+        .mode = KNOB_MODE_MIDI,
+        .sensitivity = 128,
+        .acceleration = false,
+        .reverse = false,
+        .midi_channel = 0,
+        .midi_cc = 0,
+        .midi_mode = MIDI_MODE_SIGNED
+    };
+    set_knob_config(config);
 
     // initialize rgb
     colormap(0, true);
@@ -64,15 +66,18 @@ void keyboard_pre_init_user(void) {
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
     static int cc = 0;
+    knob_config_t config = get_knob_config();
 
     // middle button toggles midi on/off
     if (keycode == KC_2) {
         if (!record->event.pressed) return false;
-        if (get_knob_mode() == KNOB_MODE_MIDI) {
-            set_knob_mode(KNOB_MODE_OFF);
+        if (config.mode == KNOB_MODE_MIDI) {
+            config.mode = KNOB_MODE_OFF;
+            set_knob_config(config);
             colormap(cc, false);
         } else {
-            set_knob_mode(KNOB_MODE_MIDI);
+            config.mode = KNOB_MODE_MIDI;
+            set_knob_config(config);
             colormap(cc, true);
         }
         return false;
@@ -87,8 +92,9 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
         } else if (cc == -1) {
             cc = 7;
         }
-        set_knob_midi_cc(cc);
-        colormap(cc, get_knob_mode() == KNOB_MODE_MIDI);
+        config.midi_cc = cc;
+        set_knob_config(config);
+        colormap(cc, config.mode == KNOB_MODE_MIDI);
         return false;
     }
 
