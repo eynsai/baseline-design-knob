@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
-#include "pointing_device.h"
+// #include "pointing_device.h"
 #include "quantum.h"
 
 uint16_t get_as5600_raw(void);

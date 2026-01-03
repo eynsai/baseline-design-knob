@@ -3,12 +3,12 @@
 
 #include <math.h>
 
-#include "baseline_design/knob/post_config.h"
+// #include "baseline_design/knob/post_config.h"
 #include "i2c_master.h"
-#include "modifiers.h"
-#include "pointing_device.h"
-#include "report.h"
-#include "timer.h"
+// #include "modifiers.h"
+// #include "pointing_device.h"
+// #include "report.h"
+// #include "timer.h"
 
 #include "knob.h"
 
